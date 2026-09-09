@@ -1,0 +1,47 @@
+version: "3.8"
+
+# FlixCasa Pro — CasaOS Stack Deployment
+# Import this in CasaOS App Store or run: docker compose up -d
+
+services:
+  flixcasa-pro:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: flixcasa-pro
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - TMDB_API_KEY=${TMDB_API_KEY}
+      - NEXT_PUBLIC_TMDB_API_KEY=${NEXT_PUBLIC_TMDB_API_KEY}
+      - JWT_SECRET=${JWT_SECRET}
+      - ENCRYPTION_SECRET=${ENCRYPTION_SECRET}
+      - ROOT_ADMIN_EMAIL=${ROOT_ADMIN_EMAIL:-admin@flixcasa.local}
+      - DOWNLOAD_PATH=/DATA/Downloads/Movies
+      - CASAOS_HOST=${CASAOS_HOST:-casaos.local}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-https://flix-casa-pro-v2.vercel.app}
+      - NODE_ENV=production
+      - NODE_OPTIONS=--max-old-space-size=128
+    volumes:
+      - /DATA/Downloads/Movies:/DATA/Downloads/Movies
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 64M
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    labels:
+      - "casaos.io/name=FlixCasa Pro"
+      - "casaos.io/category=Media"
+      - "casaos.io/icon=https://raw.githubusercontent.com/anysphere/cursor-logo/main/cursor-logo.svg"
+      - "casaos.io/description=Smart Media Streaming & Downloading for Android TV, Mobile & CasaOS"
+      - "casaos.io/port=3000"
+      - "casaos.io/protocol=http"
+      - "casaos.io/admin=/admin"

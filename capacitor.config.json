@@ -1,0 +1,19 @@
+{
+  "appId": "com.flixcasa.pro",
+  "appName": "Flix Casa Pro",
+  "webDir": "out",
+  "bundledWebRuntime": false,
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 0,
+      "launchAutoHide": true
+    }
+  },
+  "android": {
+    "backgroundColor": "#09090b",
+    "allowMixedContent": false
+  },
+  "server": {
+    "androidScheme": "https"
+  }
+}

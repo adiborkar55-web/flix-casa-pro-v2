@@ -1,0 +1,11 @@
+node_modules 
+.next 
+android 
+out 
+build 
+dist 
+.git 
+*.mp4 
+*.mkv 
+*.zip 
+*.rar

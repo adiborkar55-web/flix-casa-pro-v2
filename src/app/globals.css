@@ -1,0 +1,191 @@
+@import "tailwindcss";
+
+:root {
+  --background: #09090b;
+  --foreground: #fafafa;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), system-ui, sans-serif;
+}
+
+*:focus-visible {
+  outline: none;
+}
+
+[data-device="tv"] *, [data-low-memory="true"] * {
+  animation-duration: 0.01ms !important;
+  transition-duration: 0.01ms !important;
+}
+
+[data-device="tv"] * {
+  filter: none !important;
+  scroll-behavior: auto !important;
+}
+
+[data-device="tv"] button:focus-visible,
+[data-device="tv"] a:focus-visible {
+  outline: 4px solid #facc15;
+  outline-offset: 5px;
+  transform: scale(1.06);
+}
+
+input[type="range"] {
+  -webkit-appearance: none;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 2px;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #facc15;
+  cursor: pointer;
+}
+
+.flix-splash {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: #000;
+  color: #fff;
+  isolation: isolate;
+  opacity: 1;
+  transition: opacity 650ms cubic-bezier(0.22, 1, 0.36, 1), visibility 650ms;
+}
+
+.flix-splash--leaving {
+  opacity: 0;
+  visibility: hidden;
+}
+
+.flix-splash__stage {
+  position: relative;
+  display: grid;
+  width: min(72vw, 360px);
+  aspect-ratio: 1;
+  place-items: center;
+}
+
+.flix-splash__halo {
+  position: absolute;
+  width: 62%;
+  aspect-ratio: 1;
+  border: 1px solid rgba(53, 239, 255, 0.32);
+  border-radius: 50%;
+  box-shadow: 0 0 45px rgba(53, 239, 255, 0.22), inset 0 0 35px rgba(155, 92, 255, 0.15);
+  animation: flix-halo 2.8s ease-in-out infinite;
+}
+
+.flix-splash__logo-wrap {
+  position: relative;
+  width: 42%;
+  aspect-ratio: 0.78;
+  transform: perspective(520px) rotateY(-12deg) rotateX(4deg) scale(0.35);
+  animation: flix-logo-zoom 1.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.flix-splash__logo {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-family: Georgia, serif;
+  font-size: clamp(8rem, 25vw, 13rem);
+  font-weight: 900;
+  line-height: 0.8;
+  user-select: none;
+}
+
+.flix-splash__logo--back {
+  color: #9b5cff;
+  transform: translate(16px, 14px);
+  text-shadow: 5px 5px 0 #5725aa, 0 0 28px rgba(155, 92, 255, 0.9);
+}
+
+.flix-splash__logo--front {
+  background: linear-gradient(135deg, #e8fdff 0%, #35efff 36%, #9b5cff 76%, #dfbaff 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 0 12px rgba(53, 239, 255, 0.92)) drop-shadow(0 0 26px rgba(155, 92, 255, 0.72));
+}
+
+.flix-splash__shine {
+  position: absolute;
+  inset: -15% -45%;
+  background: linear-gradient(105deg, transparent 42%, rgba(255, 255, 255, 0.95) 50%, transparent 58%);
+  mix-blend-mode: screen;
+  transform: translateX(-75%) skewX(-18deg);
+  animation: flix-shine 1.8s 0.55s ease-in-out forwards;
+}
+
+.flix-splash__waves {
+  position: absolute;
+  top: 50%;
+  width: 24%;
+  height: 30%;
+  opacity: 0;
+  background: repeating-linear-gradient(90deg, transparent 0 6px, rgba(53, 239, 255, 0.9) 7px 9px, transparent 10px 15px);
+  filter: blur(0.5px) drop-shadow(0 0 8px #35efff);
+  animation: flix-wave 1.5s 0.65s ease-out forwards;
+}
+
+.flix-splash__waves--left { left: 0; transform: translateY(-50%) perspective(100px) rotateY(35deg); }
+.flix-splash__waves--right { right: 0; transform: translateY(-50%) perspective(100px) rotateY(-35deg); background-image: repeating-linear-gradient(90deg, transparent 0 6px, rgba(155, 92, 255, 0.9) 7px 9px, transparent 10px 15px); filter: blur(0.5px) drop-shadow(0 0 8px #9b5cff); }
+
+.flix-splash__credit {
+  margin: -8px 0 0;
+  color: #e2e6f2;
+  font-family: var(--font-geist-sans), sans-serif;
+  font-size: clamp(0.8rem, 2.4vw, 1rem);
+  font-weight: 500;
+  letter-spacing: 0.34em;
+  opacity: 0;
+  text-shadow: 0 0 14px rgba(53, 239, 255, 0.65);
+  animation: flix-credit-in 0.8s 1.25s ease-out forwards;
+}
+
+.flix-splash__progress {
+  width: 100px;
+  height: 2px;
+  margin-top: 30px;
+  overflow: hidden;
+  background: #1b1b24;
+}
+
+.flix-splash__progress span {
+  display: block;
+  width: 45%;
+  height: 100%;
+  background: #35efff;
+  box-shadow: 0 0 10px #35efff;
+  animation: flix-progress 1.7s ease-in-out infinite;
+}
+
+@keyframes flix-logo-zoom { to { transform: perspective(520px) rotateY(-12deg) rotateX(4deg) scale(1); } }
+@keyframes flix-shine { to { transform: translateX(75%) skewX(-18deg); } }
+@keyframes flix-halo { 50% { transform: scale(1.12); opacity: 0.55; } }
+@keyframes flix-wave { 0% { opacity: 0; transform: translateY(-50%) scaleX(0.2); } 35% { opacity: 1; } 100% { opacity: 0.15; transform: translateY(-50%) scaleX(1); } }
+@keyframes flix-credit-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes flix-progress { 0% { transform: translateX(-110%); } 100% { transform: translateX(230%); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .flix-splash__logo-wrap, .flix-splash__shine, .flix-splash__waves, .flix-splash__credit, .flix-splash__halo, .flix-splash__progress span { animation-duration: 0.01ms; animation-iteration-count: 1; }
+}

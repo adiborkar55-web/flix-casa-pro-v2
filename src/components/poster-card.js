@@ -1,0 +1,6 @@
+"use client";
+import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
+import Image from "next/image";
+export function PosterCard({ item, onClick }) {
+    return (_jsxs("button", { onClick: () => onClick === null || onClick === void 0 ? void 0 : onClick(item), className: "group relative aspect-[2/3] w-full overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900 shadow-lg transition-all duration-200 hover:scale-[1.02] hover:shadow-yellow-400/20 focus:outline-none focus:ring-4 focus:ring-yellow-400 focus:scale-105", "aria-label": `Watch ${item.title}`, children: [item.posterPath ? (_jsx(Image, { src: item.posterPath, alt: item.title, fill: true, className: "object-cover transition-transform duration-300 group-hover:scale-105 group-focus:scale-105", sizes: "(max-width: 640px) 40vw, (max-width: 1024px) 22vw, 14vw", unoptimized: true })) : (_jsx("div", { className: "flex h-full items-center justify-center p-2 text-center text-xs text-zinc-500", children: item.title })), _jsx("div", { className: "absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" }), _jsx("div", { className: "absolute bottom-2 left-2 right-2 text-left", children: _jsx("p", { className: "line-clamp-2 text-sm font-semibold text-white", children: item.title }) })] }));
+}
