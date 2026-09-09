@@ -1,57 +1,46 @@
-name: Build Android Debug APK
+name: Build Android APK
 
 on:
   push:
-    branches: [main, master]
+    branches: [ main ]
   workflow_dispatch:
 
-permissions:
-  contents: read
-
 jobs:
-  build-apk:
+  build:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout
+      - name: Checkout Source
         uses: actions/checkout@v4
 
-      - name: Set up Java 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-          cache: gradle
-
-      - name: Set up Node.js 18
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
-          cache: npm
+          node-version: 18
 
-      - name: Install dependencies
-        run: npm ci
+      - name: Install Dependencies
+        run: npm install
 
-      - name: Build Next.js web assets
+      - name: Build Next.js Web Assets
         run: npm run build
-        env:
-          NEXT_PUBLIC_SUPABASE_URL: https://kzwcibrkcufjwckcwdfv.supabase.co
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
 
-      - name: Verify Capacitor web assets
-        run: test -d out && test -f out/index.html
+      - name: Setup Java JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
 
       - name: Sync Capacitor Android
         run: npx cap sync android
 
-      - name: Build Android debug APK
-        working-directory: android
+      - name: Build Android APK
         run: |
+          cd android
           chmod +x gradlew
           ./gradlew assembleDebug
 
-      - name: Upload debug APK
+      - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: flix-casa-pro-debug-apk
-          path: android/app/build/outputs/apk/debug/*.apk
-          if-no-files-found: error
+          name: FlixCasa-Pro-APK
+          path: android/app/build/outputs/apk/debug/app-debug.apk
