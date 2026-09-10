@@ -17,12 +17,28 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 18
+          cache: npm
 
       - name: Install Dependencies
-        run: npm install
+        run: npm install --legacy-peer-deps
 
       - name: Build Next.js Web Assets
-        run: npm run build
+        env:
+          NEXT_DISABLE_ESLINT: true
+          NEXT_TELEMETRY_DISABLED: 1
+        run: |
+          set -e
+          [ ! -d src/app/api ] || mv src/app/api src/app-api-build-backup
+          [ ! -d app/api ] || mv app/api app-api-build-backup
+          restore_routes() {
+            [ ! -d src/app-api-build-backup ] || mv src/app-api-build-backup src/app/api
+            [ ! -d app-api-build-backup ] || mv app-api-build-backup app/api
+          }
+          trap restore_routes EXIT
+          npm run build
+
+      - name: Verify Static Web Assets
+        run: test -f out/index.html
 
       - name: Setup Java JDK
         uses: actions/setup-java@v4
