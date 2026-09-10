@@ -76,3 +76,4 @@ function WatchContent() {
 export default function WatchPage() {
     return (_jsx(Suspense, { fallback: _jsx("div", { className: "flex min-h-screen items-center justify-center bg-black", children: _jsx("div", { className: "h-12 w-12 animate-spin rounded-full border-4 border-yellow-400 border-t-transparent" }) }), children: _jsx(WatchContent, {}) }));
 }
+export async function generateStaticParams() { return []; }
