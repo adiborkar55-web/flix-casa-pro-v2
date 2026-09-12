@@ -1,1 +1,9 @@
-{"appId": "com.flixcasa.pro", "appName": "FlixCasa Pro", "webDir": "out", "server": {"androidScheme": "https", "cleartext": true}}
+{
+  "appId": "com.flixcasa.pro",
+  "appName": "FlixCasa Pro",
+  "webDir": "out",
+  "server": {
+    "androidScheme": "https",
+    "cleartext": true
+  }
+}
