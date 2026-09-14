@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { NextResponse } from "next/server";
 import { COOKIE_NAME, verifySessionToken } from "@/lib/jwt";
 import { getAccount, touchSession } from "@/lib/server/account-store";
