@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, Pause, Play, Settings, X } from "lucide-react";
+import { ChevronDown, Pause, Play, RefreshCw, Settings, X } from "lucide-react";
 import Hls from "hls.js";
-import { normalizeStreamUrl, type StreamSource } from "@/lib/stream";
+import { isSafeStreamUrl, normalizeStreamUrl, type StreamSource } from "@/lib/stream";
 import { getPlayerRemoteConfig, resolvePlayerServers, type PlayerRemoteConfig } from "@/lib/player-config";
 import type { DeviceType } from "@/hooks/use-device-type";
 import { supabase } from "@/lib/supabase";
@@ -18,8 +18,10 @@ interface VideoPlayerProps {
   isHindiUnavailable?: boolean;
   onClose?: () => void;
   onProgress?: (progress: number, duration?: number) => void;
+  onComplete?: () => void;
   accountId?: string;
   deviceType?: DeviceType;
+  onRefresh?: (resumeAt: number) => Promise<void> | void;
 }
 
 function formatTime(seconds: number) {
@@ -40,7 +42,7 @@ function cleanTmdbId(value: string | number | null | undefined) {
   return String(value).trim().replace(/[^0-9]/g, "");
 }
 
-export function VideoPlayer({ src, sources, title, tmdbId, preferredServerUrl, isHindiUnavailable = false, onClose, onProgress, accountId, deviceType = "desktop" }: VideoPlayerProps) {
+export function VideoPlayer({ src, sources, title, tmdbId, preferredServerUrl, isHindiUnavailable = false, onClose, onProgress, onComplete, accountId, deviceType = "desktop", onRefresh }: VideoPlayerProps) {
   const [currentServerIndex, setCurrentServerIndex] = useState(0);
   const [isAutoMode, setIsAutoMode] = useState(true);
   const [showServerMenu, setShowServerMenu] = useState(false);
@@ -71,8 +73,10 @@ export function VideoPlayer({ src, sources, title, tmdbId, preferredServerUrl, i
   const [preferredLanguage, setPreferredLanguage] = useState<"Hindi" | "English" | "Auto">("Hindi");
   const [subtitleTrack, setSubtitleTrack] = useState("Off");
   const [quality, setQuality] = useState("Auto");
-  const [isScanning, setIsScanning] = useState(true);
+  const [isScanning, setIsScanning] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const scanStartedRef = useRef(false);
+  const completionHandledRef = useRef(false);
 
   const cleanId = cleanTmdbId(tmdbId);
   const storageKey = cleanId ? `flixcasa_resume_${cleanId}` : "";
@@ -80,8 +84,8 @@ export function VideoPlayer({ src, sources, title, tmdbId, preferredServerUrl, i
 
   const servers = useMemo(() => {
     const configured = cleanId ? resolvePlayerServers(cleanId, remoteConfig) : [];
-    const supplied = sources?.map((source) => ({ label: source.label, url: normalizeStreamUrl(source.url) })).filter((source) => source.url) || [];
-    const combined = [...supplied, ...configured];
+    const supplied = sources?.map((source) => ({ label: source.label, url: normalizeStreamUrl(source.url) })).filter((source) => source.url && isSafeStreamUrl(source.url)) || [];
+    const combined = [...supplied, ...configured].filter((server) => isSafeStreamUrl(server.url));
     if (combined.length) {
       const seen = new Set<string>();
       return combined.filter((server) => {
@@ -119,7 +123,7 @@ export function VideoPlayer({ src, sources, title, tmdbId, preferredServerUrl, i
     }
     controlsTimeoutRef.current = window.setTimeout(() => {
       setControlsVisible(false);
-    }, 3000);
+    }, 1000);
   }, []);
 
   const saveResumeTime = useCallback(
@@ -140,7 +144,7 @@ export function VideoPlayer({ src, sources, title, tmdbId, preferredServerUrl, i
 
   useEffect(() => {
     let isMounted = true;
-    (async () => {
+    const refreshRemoteConfig = async () => {
       try {
         const config = await getPlayerRemoteConfig();
         if (isMounted) {
@@ -151,10 +155,14 @@ export function VideoPlayer({ src, sources, title, tmdbId, preferredServerUrl, i
           setRemoteConfig(null);
         }
       }
-    })();
+    };
+
+    void refreshRemoteConfig();
+    const interval = window.setInterval(() => void refreshRemoteConfig(), 60_000);
 
     return () => {
       isMounted = false;
+      window.clearInterval(interval);
     };
   }, []);
 
@@ -224,36 +232,9 @@ export function VideoPlayer({ src, sources, title, tmdbId, preferredServerUrl, i
 
   useEffect(() => {
     if (scanStartedRef.current || !servers.length || manualSelectionRef.current) return;
-    if (preferredServerUrl) {
-      scanStartedRef.current = true;
-      setIsScanning(false);
-      setStatusText("Playing prefetched server");
-      return;
-    }
     scanStartedRef.current = true;
-    let active = true;
-    const controller = new AbortController();
-    setStatusText(`Scanning ${servers.length} Fast Hindi Servers... (4s max)`);
-    const timeout = window.setTimeout(() => controller.abort(), 4000);
-    Promise.any(servers.map((server, index) => fetch(server.url, { method: "HEAD", mode: "no-cors", cache: "no-store", signal: controller.signal }).then(() => index)))
-      .then((index) => {
-        if (!active || manualSelectionRef.current) return;
-        setCurrentServerIndex(index);
-        setHasManualSelection(true);
-        setStatusText(`Playing ${servers[index]?.label || "fastest server"}`);
-      })
-      .catch(() => {
-        if (active) setStatusText("Loading primary server...");
-      })
-      .finally(() => {
-        if (active) setIsScanning(false);
-        window.clearTimeout(timeout);
-      });
-    return () => {
-      active = false;
-      controller.abort();
-      window.clearTimeout(timeout);
-    };
+    setIsScanning(false);
+    setStatusText(preferredServerUrl ? "Playing prefetched server" : "Playing selected source");
   }, [preferredServerUrl, servers]);
 
   useEffect(() => {
@@ -405,6 +386,25 @@ export function VideoPlayer({ src, sources, title, tmdbId, preferredServerUrl, i
     }
     setStatusText("All configured servers are unavailable.");
   }, [currentServerIndex, servers]);
+
+  const handleRefresh = useCallback(async () => {
+    const resume = currentTimeRef.current;
+    saveResumeTime(resume);
+    setResumeAt(resume);
+    setIsRefreshing(true);
+    setStatusText("Refreshing playback link...");
+    try {
+      if (onRefresh) {
+        await onRefresh(resume);
+      } else {
+        autoSwitchServer();
+      }
+    } finally {
+      setIsRefreshing(false);
+      setStatusBannerVisible(true);
+      showControls();
+    }
+  }, [autoSwitchServer, onRefresh, saveResumeTime, showControls]);
 
   const handleIframeError = () => {
     autoSwitchServer();
@@ -570,6 +570,15 @@ export function VideoPlayer({ src, sources, title, tmdbId, preferredServerUrl, i
         </div>
         <div className="flex items-center gap-2">
           <button
+            onClick={() => void handleRefresh()}
+            disabled={isRefreshing}
+            className="rounded border border-zinc-700 bg-zinc-900/80 p-2 text-zinc-200 hover:bg-zinc-800 disabled:opacity-50"
+            aria-label="Refresh broken playback link"
+            title="Not playing? Refresh link"
+          >
+            <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
+          </button>
+          <button
             onClick={() => {
               setIsPlaying((prev) => !prev);
               showControls();
@@ -655,6 +664,11 @@ export function VideoPlayer({ src, sources, title, tmdbId, preferredServerUrl, i
           playsInline
           controls
           onError={handleNativeError}
+          onEnded={() => {
+            if (completionHandledRef.current) return;
+            completionHandledRef.current = true;
+            onComplete?.();
+          }}
           onPlay={() => {
             setIsPlaying(true);
             setStatusBannerVisible(false);
@@ -668,12 +682,24 @@ export function VideoPlayer({ src, sources, title, tmdbId, preferredServerUrl, i
           }}
           onTimeUpdate={(event) => {
             const current = event.currentTarget.currentTime;
+            const duration = event.currentTarget.duration;
             setCurrentTime(current);
+            if (duration > 0 && current / duration >= 0.92 && !completionHandledRef.current) {
+              completionHandledRef.current = true;
+              onComplete?.();
+            }
             if (current - progressSyncRef.current >= 5) {
               progressSyncRef.current = current;
               onProgress?.(current, event.currentTarget.duration);
               if (accountId && cleanId) {
-                void supabase.from("watch_history").upsert({ user_id: accountId, movie_id: Number(cleanId), progress: current, duration: event.currentTarget.duration || 0, updated_at: new Date().toISOString() }, { onConflict: "user_id,movie_id" });
+                void (async () => {
+                  try {
+                    const { error } = await supabase.from("watch_history").upsert({ user_id: accountId, movie_id: Number(cleanId), progress: current, duration: duration || 0, updated_at: new Date().toISOString() }, { onConflict: "user_id,movie_id" });
+                    if (error) saveResumeTime(current);
+                  } catch {
+                    saveResumeTime(current);
+                  }
+                })();
               }
             }
           }}

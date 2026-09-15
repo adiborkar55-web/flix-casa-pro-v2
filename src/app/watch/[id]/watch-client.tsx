@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState, Suspense } from "react";
+import { useCallback, useEffect, useRef, useState, Suspense } from "react";
 import { useRouter, useSearchParams, useParams } from "next/navigation";
 import { VideoPlayer } from "@/components/video-player";
 import { useAuthStore } from "@/stores/auth-store";
 import { useLibraryStore } from "@/stores/library-store";
 import { useSettingsStore } from "@/stores/auth-store";
 import { buildStreamSources, prefetchFastestServer, type StreamSource } from "@/lib/stream";
+import { getCachedSources, resolveStreamSources, saveResolvedSources } from "@/lib/providers";
 import { cloudApi } from "@/lib/cloud-api";
 import { useDeviceType } from "@/hooks/use-device-type";
 
@@ -42,6 +43,7 @@ function WatchContent() {
   const movieId = parseInt(String(params.id)) || 0;
   const account = useAuthStore((s) => s.account);
   const saveProgress = useLibraryStore((s) => s.saveProgress);
+  const removeProgress = useLibraryStore((s) => s.removeProgress);
   const qualityPref = useSettingsStore((s) => s.settings.qualityPreference);
   const [streamUrl, setStreamUrl] = useState<string | null>(null);
   const [sources, setSources] = useState<StreamSource[]>([]);
@@ -50,7 +52,7 @@ function WatchContent() {
   const [poster, setPoster] = useState<string | undefined>();
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
-  const [isScanning, setIsScanning] = useState(true);
+  const [isScanning, setIsScanning] = useState(false);
   const [englishTitle, setEnglishTitle] = useState("Movie");
   const mountedRef = useRef(false);
 
@@ -62,7 +64,7 @@ function WatchContent() {
   useEffect(() => {
     mountedRef.current = true;
     async function findStream() {
-      setLoading(true); setIsScanning(true); setError(""); setStreamUrl(null);
+      setLoading(true); setIsScanning(false); setError(""); setStreamUrl(null);
       try {
         const tmdbRes = await fetch(cloudApi(`/api/tmdb?id=${encodeURIComponent(String(params.id))}&type=${encodeURIComponent(mediaType)}`));
         const tmdbData = await tmdbRes.json();
@@ -73,9 +75,12 @@ function WatchContent() {
         const resolvedTitle = [match?.title, match?.originalTitle, match?.original_title, match?.name].find((value): value is string => typeof value === "string" && /^[\x00-\x7F]+$/.test(value.trim()) && value.trim().length > 0)?.trim() || `Movie ${resolvedTmdbId}`;
         setEnglishTitle(resolvedTitle); setTmdbId(resolvedTmdbId);
         const fallbackUrl = buildBackupEmbedUrl(String(params.id), mediaType);
-        const nextSources = buildStreamSources(resolvedTmdbId, mediaType, season, episode);
-        const fastestSource = await prefetchFastestServer(nextSources, 4000);
+        const providerContext = { tmdbId: resolvedTmdbId, mediaType, season, episode } as const;
+        const cachedSources = getCachedSources(providerContext);
+        const nextSources = cachedSources.length ? cachedSources : resolveStreamSources(providerContext);
+        const fastestSource = cachedSources[0] || nextSources[0];
         if (!mountedRef.current) return;
+        if (!cachedSources.length) saveResolvedSources(providerContext, nextSources);
         setSources(nextSources); setPrefetchedUrl(fastestSource?.url || null); setStreamUrl(fastestSource?.url || fallbackUrl || nextSources[0]?.url || null);
       } catch {
         if (!mountedRef.current) return;
@@ -94,9 +99,31 @@ function WatchContent() {
     if (!account || !movieId) return;
     saveProgress(account.id, { movieId, mediaType, progress: current, duration, updatedAt: new Date().toISOString() });
   };
+
+  const handleComplete = useCallback(() => {
+    if (!account || !movieId) return;
+    void removeProgress(account.id, movieId);
+    try {
+      window.localStorage.removeItem(`flixcasa_resume_${movieId}`);
+    } catch {
+      // Local resume cleanup is best effort.
+    }
+  }, [account, movieId, removeProgress]);
+
+  const refreshPlayback = useCallback(async () => {
+    const resolvedId = tmdbId || params.id;
+    const providerContext = { tmdbId: String(resolvedId), mediaType, season, episode, forceRefresh: true } as const;
+    const refreshedSources = resolveStreamSources(providerContext);
+    const refreshed = await prefetchFastestServer(refreshedSources, 1000);
+    const orderedSources = refreshed ? [refreshed, ...refreshedSources.filter((source) => source.url !== refreshed.url)] : refreshedSources;
+    saveResolvedSources(providerContext, orderedSources);
+    setSources(orderedSources);
+    setPrefetchedUrl(refreshed?.url || orderedSources[0]?.url || null);
+    setStreamUrl(refreshed?.url || orderedSources[0]?.url || streamUrl);
+  }, [episode, mediaType, params.id, season, streamUrl, tmdbId]);
   if (loading) return <div className="flex min-h-screen items-center justify-center bg-black"><div className="text-center"><div className="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-4 border-yellow-400 border-t-transparent" /><p className="text-zinc-400">{isScanning ? "Scanning 20 Fast Hindi Servers... (4s max)" : "Preparing playback..."}</p></div></div>;
   if (!streamUrl) return <div className="flex min-h-screen flex-col items-center justify-center bg-black p-8"><p className="mb-4 text-center text-zinc-300">{error || "No Direct Hindi Stream Found. Click below to try Backup Embeds."}</p><button onClick={() => router.back()} className="rounded bg-yellow-400 px-6 py-2 font-semibold text-black">Go Back</button></div>;
-  return <VideoPlayer src={streamUrl} sources={sources} title={englishTitle} tmdbId={tmdbId} preferredServerUrl={prefetchedUrl || undefined} isHindiUnavailable={hindiUnavailableFromQuery} poster={poster} onClose={() => router.back()} onProgress={handleProgress} accountId={account?.id} deviceType={deviceType} />;
+  return <VideoPlayer src={streamUrl} sources={sources} title={englishTitle} tmdbId={tmdbId} preferredServerUrl={prefetchedUrl || undefined} isHindiUnavailable={hindiUnavailableFromQuery} poster={poster} onClose={() => router.back()} onProgress={handleProgress} onComplete={handleComplete} onRefresh={refreshPlayback} accountId={account?.id} deviceType={deviceType} />;
 }
 
 export default function WatchClient() {

@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { MovieItem } from "@/types";
 import Image from "next/image";
 import { Play, X } from "lucide-react";
 import { MyListButton } from "./my-list-button";
 import { isTV } from "@/lib/variant";
 import { useRouter } from "next/navigation";
+import { prefetchStreamSources } from "@/lib/stream";
 
 interface MovieModalProps {
   item: MovieItem | null;
@@ -16,6 +17,11 @@ interface MovieModalProps {
 export function MovieModal({ item, onClose }: MovieModalProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!item) return;
+    void prefetchStreamSources(String(item.id), item.mediaType === "tv" ? "tv" : "movie");
+  }, [item]);
 
   if (!item) return null;
 

@@ -13,6 +13,7 @@ interface ProfileState {
   activeProfile: Profile | null;
   isLoading: boolean;
   hydrate: (accountId: string) => Promise<void>;
+  reset: () => void;
   setActiveProfile: (profile: Profile | null) => void;
   addProfile: (accountId: string, name: string, avatar?: string) => Promise<Profile>;
   updateProfile: (accountId: string, id: string, updates: Partial<Pick<Profile, "name" | "avatar">>) => Promise<void>;
@@ -36,7 +37,10 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
   activeProfile: null,
   isLoading: true,
 
+  reset: () => set({ profiles: [], activeProfile: null, isLoading: true }),
+
   hydrate: async (accountId) => {
+    set({ profiles: [], activeProfile: null, isLoading: true });
     const [stored, synced] = await Promise.all([
       getEncryptedItem<Profile[]>("profiles", accountId),
       getSyncedCollections(accountId),

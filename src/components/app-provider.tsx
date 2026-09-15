@@ -23,6 +23,8 @@ export function AppProvider({ children }: AppProviderProps) {
   const hydrateProfiles = useProfileStore((s) => s.hydrate);
   const setActiveProfile = useProfileStore((s) => s.setActiveProfile);
   const hydrateLibrary = useLibraryStore((s) => s.hydrate);
+  const resetLibrary = useLibraryStore((s) => s.reset);
+  const resetProfiles = useProfileStore((s) => s.reset);
   const hydrateSettings = useSettingsStore((s) => s.hydrate);
 
   const initialize = useCallback(async () => {
@@ -54,6 +56,8 @@ export function AppProvider({ children }: AppProviderProps) {
   useEffect(() => {
     if (!account) {
       setActiveProfile(null);
+      resetLibrary();
+      resetProfiles();
       return;
     }
 
@@ -62,7 +66,7 @@ export function AppProvider({ children }: AppProviderProps) {
       hydrateLibrary(account.id),
       hydrateSettings(account.id),
     ]);
-  }, [account, hydrateProfiles, hydrateLibrary, hydrateSettings, setActiveProfile]);
+  }, [account, hydrateProfiles, hydrateLibrary, hydrateSettings, resetLibrary, resetProfiles, setActiveProfile]);
 
   useEffect(() => {
     if (!account) return;

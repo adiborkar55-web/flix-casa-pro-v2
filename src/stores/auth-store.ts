@@ -4,7 +4,7 @@ import { create } from "zustand";
 import type { GoogleAccount, UserSettings } from "@/types";
 import { cloudApi } from "@/lib/cloud-api";
 import { getEncryptedItem, setEncryptedItem } from "@/lib/storage";
-import { getSupabaseSession, supabase } from "@/lib/supabase";
+import { supabase } from "@/lib/supabase";
 
 interface AuthState {
   account: GoogleAccount | null;
@@ -40,12 +40,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     } else {
       await supabase.auth.signInWithPassword({ email, password }).catch(() => undefined);
     }
-    await setEncryptedItem("session", { accountId: account.id, email: account.email }, account.id);
-    const persistentSession = data.token || JSON.stringify({ accountId: account.id, email: account.email, name: account.name });
-    window.localStorage.setItem("FLIXCASA_SESSION", persistentSession);
-    window.localStorage.setItem("FLIXCASA_PERSISTENT_USER_SESSION", persistentSession);
-    window.localStorage.setItem("FLIXCASA_USER_SESSION", JSON.stringify({ accountId: account.id, email: account.email, name: account.name }));
-    document.cookie = `FLIXCASA_SESSION=${encodeURIComponent(persistentSession)}; Max-Age=315360000; Path=/; SameSite=Strict`;
+    await setEncryptedItem("session", account, account.id);
+    window.localStorage.setItem("FLIXCASA_ACCOUNT_ID", account.id);
     set({ account, isAuthenticated: true, isLoading: false });
   },
 
@@ -61,41 +57,43 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     window.localStorage.removeItem("FLIXCASA_USER_SESSION");
     window.localStorage.removeItem("FLIXCASA_SESSION");
     window.localStorage.removeItem("FLIXCASA_PERSISTENT_USER_SESSION");
-    document.cookie = "FLIXCASA_SESSION=; Max-Age=0; Path=/; SameSite=Strict";
+    window.localStorage.removeItem("FLIXCASA_ACCOUNT_ID");
   },
 
   hydrate: async () => {
+    let cachedAccount: GoogleAccount | null = null;
     try {
-      const persisted = window.localStorage.getItem("FLIXCASA_PERSISTENT_USER_SESSION") || window.localStorage.getItem("FLIXCASA_SESSION");
-      const token = persisted && !persisted.startsWith("{") ? persisted : "";
-      const res = await fetch(cloudApi("/api/auth/session"), {
-        credentials: "include",
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-      });
-      if (res.ok) {
-        const data = await res.json();
-        set({ account: data.account, isAuthenticated: true, isLoading: false });
-        return;
-      }
+      window.localStorage.removeItem("FLIXCASA_SESSION");
+      window.localStorage.removeItem("FLIXCASA_PERSISTENT_USER_SESSION");
+      const accountId = window.localStorage.getItem("FLIXCASA_ACCOUNT_ID");
+      if (accountId) cachedAccount = await getEncryptedItem<GoogleAccount>("session", accountId);
+      const legacyAccount = window.localStorage.getItem("FLIXCASA_USER_SESSION");
+      if (!cachedAccount && legacyAccount) cachedAccount = JSON.parse(legacyAccount) as GoogleAccount;
     } catch {
-      /* session expired */
+      cachedAccount = null;
     }
-    const supabaseSession = await getSupabaseSession().catch(() => null);
-    if (supabaseSession?.user) {
-      const user = supabaseSession.user;
-      const account: GoogleAccount = {
-        id: user.id,
-        email: user.email || "",
-        name: String(user.user_metadata?.name || user.email?.split("@")[0] || "User"),
-        picture: typeof user.user_metadata?.picture === "string" ? user.user_metadata.picture : undefined,
-        isOnline: true,
-        lastSeen: new Date().toISOString(),
-        isBlocked: false,
-        isRootAdmin: false,
-      };
-      set({ account, isAuthenticated: true, isLoading: false });
+
+    if (cachedAccount) {
+      set({ account: cachedAccount, isAuthenticated: true, isLoading: false });
+      void (async () => {
+        try {
+          const response = await fetch(cloudApi("/api/auth/session"), { credentials: "include", cache: "no-store" });
+          if (response.ok) {
+            const data = await response.json();
+            set({ account: data.account, isAuthenticated: true });
+            await setEncryptedItem("session", data.account, data.account.id);
+          } else if (response.status === 401 || response.status === 403) {
+            const { removeEncryptedItem } = await import("@/lib/storage");
+            removeEncryptedItem("session", cachedAccount!.id);
+            set({ account: null, isAuthenticated: false });
+          }
+        } catch {
+          // Keep the encrypted snapshot during transient network outages.
+        }
+      })();
       return;
     }
+
     set({ account: null, isAuthenticated: false, isLoading: false });
   },
 }));

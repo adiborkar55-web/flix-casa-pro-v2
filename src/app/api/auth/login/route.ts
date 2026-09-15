@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sanitizeEmail, sanitizeInput } from "@/lib/sanitize";
 import { createSessionToken, COOKIE_NAME } from "@/lib/jwt";
-import { getOrCreateAccount, hasAccountPassword, isIpBlocked, registerSession, setAccountPassword, verifyAccountPassword } from "@/lib/server/account-store";
+import { getAccountByEmail, getOrCreateAccount, hasAccount, hasAccountPassword, isIpBlocked, registerSession, setAccountPassword, verifyAccountPassword } from "@/lib/server/account-store";
 import { rateLimit, getClientIp } from "@/lib/rate-limit";
 import { registerInstanceUser } from "@/lib/server/instance-store";
 
@@ -23,13 +23,17 @@ export async function POST(request: NextRequest) {
   }
 
   if (mode === "signup") {
+    if (hasAccount(email)) return NextResponse.json({ error: "An account with this email already exists. Log in instead." }, { status: 409 });
     if (hasAccountPassword(email)) return NextResponse.json({ error: "An account with this email already exists" }, { status: 409 });
     setAccountPassword(email, password);
   } else if (!verifyAccountPassword(email, password)) {
     return NextResponse.json({ error: "Email or password is incorrect" }, { status: 401 });
   }
 
-  const account = getOrCreateAccount(email, name || email.split("@")[0], picture);
+  const account = mode === "login"
+    ? getAccountByEmail(email)
+    : getOrCreateAccount(email, name || email.split("@")[0], picture);
+  if (!account) return NextResponse.json({ error: "Account not found. Create an account first." }, { status: 401 });
   if (account.isBlocked) {
     return NextResponse.json({ error: "Account blocked" }, { status: 403 });
   }
@@ -48,7 +52,6 @@ export async function POST(request: NextRequest) {
 
   const response = NextResponse.json({
     success: true,
-    token,
     account: {
       id: account.id,
       email: account.email,

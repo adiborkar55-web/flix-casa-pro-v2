@@ -11,10 +11,12 @@ interface LibraryState {
   searchHistory: string[];
   isLoading: boolean;
   hydrate: (accountId: string) => Promise<void>;
+  reset: () => void;
   addToMyList: (accountId: string, item: MovieItem) => Promise<void>;
   removeFromMyList: (accountId: string, id: number) => Promise<void>;
   isInMyList: (id: number) => boolean;
   saveProgress: (accountId: string, progress: WatchProgress) => Promise<void>;
+  removeProgress: (accountId: string, movieId: number) => Promise<void>;
   clearWatchHistory: (accountId: string) => Promise<void>;
   addSearch: (accountId: string, query: string) => Promise<void>;
 }
@@ -25,7 +27,10 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
   searchHistory: [],
   isLoading: true,
 
+  reset: () => set({ myList: [], watchHistory: [], searchHistory: [], isLoading: true }),
+
   hydrate: async (accountId) => {
+    set({ myList: [], watchHistory: [], searchHistory: [], isLoading: true });
     const [myList, watchHistory, searchHistory, synced] = await Promise.all([
       getEncryptedItem<MovieItem[]>("myList", accountId),
       getEncryptedItem<WatchProgress[]>("watchHistory", accountId),
@@ -63,6 +68,13 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
     await setEncryptedItem("watchHistory", trimmed, accountId);
     void syncCollection(accountId, "watchHistory", trimmed);
     set({ watchHistory: trimmed });
+  },
+
+  removeProgress: async (accountId, movieId) => {
+    const history = get().watchHistory.filter((item) => item.movieId !== movieId);
+    await setEncryptedItem("watchHistory", history, accountId);
+    void syncCollection(accountId, "watchHistory", history);
+    set({ watchHistory: history });
   },
 
   clearWatchHistory: async (accountId) => {

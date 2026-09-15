@@ -32,6 +32,17 @@ export function getOrCreateAccount(email: string, name: string, picture?: string
   return account;
 }
 
+export function hasAccount(email: string): boolean {
+  const normalizedEmail = email.trim().toLowerCase();
+  return Array.from(accounts.values()).some((account) => account.email.toLowerCase() === normalizedEmail);
+}
+
+export function getAccountByEmail(email: string): GoogleAccount | undefined {
+  const normalizedEmail = email.trim().toLowerCase();
+  const account = Array.from(accounts.values()).find((candidate) => candidate.email.toLowerCase() === normalizedEmail);
+  return account ? { ...account, isOnline: isSessionActive(account.id) } : undefined;
+}
+
 export function addAccount(email: string, name: string): GoogleAccount {
   const normalizedEmail = email.trim().toLowerCase();
   const existing = Array.from(accounts.values()).find((account) => account.email.toLowerCase() === normalizedEmail);

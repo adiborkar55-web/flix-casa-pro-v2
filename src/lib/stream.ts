@@ -9,6 +9,55 @@ export interface StreamSource {
   seeders?: number;
 }
 
+const BLOCKED_STREAM_HOSTS = new Set(["localhost", "127.0.0.1", "0.0.0.0", "::1"]);
+const BLOCKED_STREAM_SCHEMES = /^(?:javascript|data|file|blob|about):/i;
+const TRACKING_QUERY_KEYS = /^(?:utm_|fbclid$|gclid$|msclkid$|telemetry$|tracking$)/i;
+
+export function isSafeStreamUrl(value: string | null | undefined): boolean {
+  const normalized = normalizeStreamUrl(value);
+  if (!normalized || BLOCKED_STREAM_SCHEMES.test(normalized)) return false;
+  try {
+    const parsed = new URL(normalized);
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return false;
+    if (parsed.username || parsed.password || BLOCKED_STREAM_HOSTS.has(parsed.hostname.toLowerCase())) return false;
+    for (const key of parsed.searchParams.keys()) {
+      if (TRACKING_QUERY_KEYS.test(key)) parsed.searchParams.delete(key);
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const STREAM_CACHE_TTL_MS = 30 * 60 * 1000;
+const STREAM_CACHE_PREFIX = "flixcasa_stream_cache_v1:";
+
+function streamCacheKey(tmdbId: string | number, mediaType: StreamMediaType, season?: string | number, episode?: string | number) {
+  return `${STREAM_CACHE_PREFIX}${mediaType}:${String(tmdbId)}:${season || "-"}:${episode || "-"}`;
+}
+
+export function getCachedStreamSources(tmdbId: string | number, mediaType: StreamMediaType = "movie", season?: string | number, episode?: string | number): StreamSource[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(streamCacheKey(tmdbId, mediaType, season, episode));
+    if (!raw) return [];
+    const cached = JSON.parse(raw) as { expiresAt?: number; sources?: StreamSource[] };
+    if (!cached.expiresAt || cached.expiresAt <= Date.now() || !Array.isArray(cached.sources)) return [];
+    return cached.sources.filter((source) => isSafeStreamUrl(source.url));
+  } catch {
+    return [];
+  }
+}
+
+export function cacheStreamSources(tmdbId: string | number, mediaType: StreamMediaType, sources: StreamSource[], season?: string | number, episode?: string | number) {
+  if (typeof window === "undefined" || !sources.length) return;
+  try {
+    window.localStorage.setItem(streamCacheKey(tmdbId, mediaType, season, episode), JSON.stringify({ expiresAt: Date.now() + STREAM_CACHE_TTL_MS, sources }));
+  } catch {
+    // Storage is optional on private browsing and constrained WebViews.
+  }
+}
+
 export function normalizeStreamUrl(value: string | null | undefined): string {
   if (!value) return "";
   let decoded = value.trim();
@@ -78,11 +127,21 @@ export async function prefetchFastestServer(sources: StreamSource[], timeoutMs =
       await fetch(source.url, { method: "HEAD", mode: "no-cors", cache: "no-store", signal: controller.signal });
       return source;
     }));
-    return winner;
+    return isSafeStreamUrl(winner.url) ? winner : sources[0] || null;
   } catch {
     return sources[0] || null;
   } finally {
     window.clearTimeout(timeout);
     controller.abort();
   }
+}
+
+export async function prefetchStreamSources(tmdbId: string | number, mediaType: StreamMediaType = "movie", season?: string | number, episode?: string | number): Promise<StreamSource[]> {
+  const cached = getCachedStreamSources(tmdbId, mediaType, season, episode);
+  if (cached.length) return cached;
+  const sources = buildStreamSources(tmdbId, mediaType, season, episode);
+  const winner = await prefetchFastestServer(sources, 4000);
+  const ordered = winner ? [winner, ...sources.filter((source) => source.url !== winner.url)] : sources;
+  cacheStreamSources(tmdbId, mediaType, ordered, season, episode);
+  return ordered;
 }

@@ -13,6 +13,7 @@ export interface PlayerRemoteConfig {
   adBlocking?: boolean;
   audioHint?: string;
   audioOptions?: string[];
+  featureFlags?: Record<string, boolean>;
 }
 
 const DEFAULT_PLAYER_SERVERS: PlayerServerConfig[] = [
@@ -48,6 +49,7 @@ function normalizeRemoteConfig(raw: Partial<PlayerRemoteConfig> | null | undefin
     adBlocking: raw?.adBlocking ?? true,
     audioHint: raw?.audioHint || "Hindi default. Alternate tracks may be available in the player menu.",
     audioOptions: raw?.audioOptions?.length ? raw.audioOptions : ["Hindi", "Marathi", "English"],
+    featureFlags: raw?.featureFlags || {},
   };
 }
 
