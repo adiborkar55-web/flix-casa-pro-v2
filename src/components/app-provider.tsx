@@ -9,6 +9,7 @@ import { ForceUpdateGuard } from "@/components/force-update-guard";
 import { useDeviceType } from "@/hooks/use-device-type";
 import { updatePresence } from "@/lib/cloud-sync";
 import UpdateChecker from "@/components/UpdateChecker";
+import { usePathname, useRouter } from "next/navigation";
 
 interface AppProviderProps {
   children: ReactNode;
@@ -16,6 +17,8 @@ interface AppProviderProps {
 
 export function AppProvider({ children }: AppProviderProps) {
   useDeviceType();
+  const router = useRouter();
+  const pathname = usePathname();
   const [initialized, setInitialized] = useState(false);
   const hydrateAuth = useAuthStore((s) => s.hydrate);
   const setAuthLoading = useAuthStore((s) => s.setLoading);
@@ -80,6 +83,18 @@ export function AppProvider({ children }: AppProviderProps) {
       markOffline();
     };
   }, [account]);
+
+  useEffect(() => {
+    const handleRemoteBack = (event: KeyboardEvent) => {
+      if (!(event.key === "BrowserBack" || event.key === "GoBack" || event.keyCode === 4)) return;
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLSelectElement) return;
+      if (pathname === "/" || pathname === "/browse") return;
+      event.preventDefault();
+      router.back();
+    };
+    window.addEventListener("keydown", handleRemoteBack);
+    return () => window.removeEventListener("keydown", handleRemoteBack);
+  }, [pathname, router]);
 
   return (
     <ForceUpdateGuard>

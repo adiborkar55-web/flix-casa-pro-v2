@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { detectDeviceEnvironment } from "@/lib/device/device-context";
 
 export type DeviceType = "mobile" | "desktop" | "tv";
 
@@ -13,15 +14,8 @@ interface DeviceInfo {
 const DEFAULT_DEVICE: DeviceInfo = { deviceType: "desktop", isTV: false, isLowMemory: true };
 
 function detectDevice(): DeviceInfo {
-  const userAgent = navigator.userAgent.toLowerCase();
-  const isTV = /android tv|googletv|smart-tv|smarttv|hbbtv|aft\w+|netcast|webos/.test(userAgent) ||
-    (navigator.maxTouchPoints > 0 && window.matchMedia("(min-width: 1200px)").matches);
-  const isMobile = /android|iphone|ipad|ipod|mobile/.test(userAgent) && !isTV;
-  const deviceType: DeviceType = isTV ? "tv" : isMobile ? "mobile" : "desktop";
-  const memory = (navigator as Navigator & { deviceMemory?: number }).deviceMemory;
-  const isLowMemory = isTV || isMobile || (typeof memory === "number" && memory <= 2);
-
-  return { deviceType, isTV, isLowMemory };
+  const environment = detectDeviceEnvironment();
+  return { deviceType: environment.platform, isTV: environment.isTV, isLowMemory: environment.isLowMemory };
 }
 
 export function useDeviceType(): DeviceInfo {

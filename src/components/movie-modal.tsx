@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import type { MovieItem } from "@/types";
 import Image from "next/image";
 import { Play, X } from "lucide-react";
@@ -16,7 +16,6 @@ interface MovieModalProps {
 
 export function MovieModal({ item, onClose }: MovieModalProps) {
   const router = useRouter();
-  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (!item) return;
@@ -25,8 +24,7 @@ export function MovieModal({ item, onClose }: MovieModalProps) {
 
   if (!item) return null;
 
-  const handlePlay = async () => {
-    setLoading(true);
+  const handlePlay = () => {
     router.push(`/watch/${item.id}?type=${item.mediaType}&title=${encodeURIComponent(item.title)}`);
   };
 
@@ -67,11 +65,10 @@ export function MovieModal({ item, onClose }: MovieModalProps) {
           <div className="flex flex-wrap gap-3">
             <button
               onClick={handlePlay}
-              disabled={loading}
-              className={`flex items-center gap-2 rounded bg-yellow-400 px-6 py-2.5 font-semibold text-black hover:bg-yellow-300 disabled:opacity-50 ${isTV ? "focus:outline-none " + "focus:ring-4 focus:ring-yellow-400" : "focus:outline-none focus:ring-2 focus:ring-yellow-400"}`}
+              className={`flex items-center gap-2 rounded bg-yellow-400 px-6 py-2.5 font-semibold text-black hover:bg-yellow-300 ${isTV ? "focus:outline-none " + "focus:ring-4 focus:ring-yellow-400" : "focus:outline-none focus:ring-2 focus:ring-yellow-400"}`}
             >
               <Play className="h-5 w-5 fill-black" />
-              {loading ? "Loading..." : "Play"}
+              Play
             </button>
             <MyListButton item={item} />
           </div>

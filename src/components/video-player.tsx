@@ -7,6 +7,7 @@ import { isSafeStreamUrl, normalizeStreamUrl, type StreamSource } from "@/lib/st
 import { getPlayerRemoteConfig, resolvePlayerServers, type PlayerRemoteConfig } from "@/lib/player-config";
 import type { DeviceType } from "@/hooks/use-device-type";
 import { supabase } from "@/lib/supabase";
+import { isRemoteBackKey, requestAppFullscreen } from "@/lib/device/device-context";
 
 interface VideoPlayerProps {
   src?: string;
@@ -77,6 +78,7 @@ export function VideoPlayer({ src, sources, title, tmdbId, preferredServerUrl, i
   const [isRefreshing, setIsRefreshing] = useState(false);
   const scanStartedRef = useRef(false);
   const completionHandledRef = useRef(false);
+  const fullscreenAttemptedRef = useRef(false);
 
   const cleanId = cleanTmdbId(tmdbId);
   const storageKey = cleanId ? `flixcasa_resume_${cleanId}` : "";
@@ -279,6 +281,12 @@ export function VideoPlayer({ src, sources, title, tmdbId, preferredServerUrl, i
   }, [activeSrc, isNativeSource]);
 
   useEffect(() => {
+    if (!activeSrc || fullscreenAttemptedRef.current) return;
+    fullscreenAttemptedRef.current = true;
+    void requestAppFullscreen(videoRef.current || playerRootRef.current);
+  }, [activeSrc]);
+
+  useEffect(() => {
     const video = videoRef.current;
     if (!video || !isNativeSource) return;
     video.playbackRate = playbackRate;
@@ -476,7 +484,7 @@ export function VideoPlayer({ src, sources, title, tmdbId, preferredServerUrl, i
   const handlePlayerKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     const focusable = Array.from(playerRootRef.current?.querySelectorAll<HTMLElement>("button, select, [tabindex]:not([tabindex='-1'])") || []);
     const activeIndex = focusable.indexOf(document.activeElement as HTMLElement);
-    if (event.key === "Escape" || event.key === "Backspace" || event.key === "BrowserBack") {
+    if (isRemoteBackKey(event.nativeEvent) || event.key === "Backspace") {
       event.preventDefault();
       onClose?.();
       return;
@@ -572,7 +580,7 @@ export function VideoPlayer({ src, sources, title, tmdbId, preferredServerUrl, i
           <button
             onClick={() => void handleRefresh()}
             disabled={isRefreshing}
-            className="rounded border border-zinc-700 bg-zinc-900/80 p-2 text-zinc-200 hover:bg-zinc-800 disabled:opacity-50"
+            className="rounded border border-zinc-700 bg-zinc-900/80 p-2 text-zinc-200 hover:bg-zinc-800 focus:outline-none focus:ring-4 focus:ring-yellow-400 disabled:opacity-50"
             aria-label="Refresh broken playback link"
             title="Not playing? Refresh link"
           >
@@ -583,7 +591,7 @@ export function VideoPlayer({ src, sources, title, tmdbId, preferredServerUrl, i
               setIsPlaying((prev) => !prev);
               showControls();
             }}
-            className="rounded border border-zinc-700 bg-zinc-900/80 p-2 text-zinc-200 hover:bg-zinc-800"
+            className="rounded border border-zinc-700 bg-zinc-900/80 p-2 text-zinc-200 hover:bg-zinc-800 focus:outline-none focus:ring-4 focus:ring-yellow-400"
             aria-label={isPlaying ? "Pause playback" : "Resume playback"}
           >
             {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
@@ -594,7 +602,7 @@ export function VideoPlayer({ src, sources, title, tmdbId, preferredServerUrl, i
                 setShowServerMenu((prev) => !prev);
                 showControls();
               }}
-              className="flex items-center gap-1 rounded border border-zinc-700 bg-zinc-900/80 px-3 py-1.5 text-sm text-zinc-200 hover:bg-zinc-800"
+              className="flex items-center gap-1 rounded border border-zinc-700 bg-zinc-900/80 px-3 py-1.5 text-sm text-zinc-200 hover:bg-zinc-800 focus:outline-none focus:ring-4 focus:ring-yellow-400"
             >
               Select Server
               <ChevronDown className="h-4 w-4" />
@@ -628,7 +636,7 @@ export function VideoPlayer({ src, sources, title, tmdbId, preferredServerUrl, i
           <div className="relative">
             <button
               onClick={() => setShowSettingsMenu((visible) => !visible)}
-              className="rounded border border-zinc-700 bg-zinc-900/80 p-2 text-zinc-200 hover:bg-zinc-800"
+              className="rounded border border-zinc-700 bg-zinc-900/80 p-2 text-zinc-200 hover:bg-zinc-800 focus:outline-none focus:ring-4 focus:ring-yellow-400"
               aria-label="Open playback settings"
             >
               <Settings className="h-4 w-4" />
@@ -672,6 +680,7 @@ export function VideoPlayer({ src, sources, title, tmdbId, preferredServerUrl, i
           onPlay={() => {
             setIsPlaying(true);
             setStatusBannerVisible(false);
+            void requestAppFullscreen(videoRef.current || playerRootRef.current);
           }}
           onPause={() => setIsPlaying(false)}
           onLoadedMetadata={(event) => {

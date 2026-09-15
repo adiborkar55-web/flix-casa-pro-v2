@@ -7,6 +7,7 @@ export interface StreamSource {
   hasHindiAudio?: boolean;
   quality?: number;
   seeders?: number;
+  verified?: boolean;
 }
 
 const BLOCKED_STREAM_HOSTS = new Set(["localhost", "127.0.0.1", "0.0.0.0", "::1"]);
@@ -73,6 +74,35 @@ export function normalizeStreamUrl(value: string | null | undefined): string {
   return /^https?:\/\//i.test(decoded) ? decoded : "";
 }
 
+const CHALLENGE_MARKERS = /captcha|cloudflare|checking your browser|verify you are human|access denied|just a moment|attention required/i;
+
+function isDirectMediaCandidate(url: string, contentType: string) {
+  return /(?:video\/|audio\/|application\/(?:vnd\.apple\.mpegurl|x-mpegurl|dash\+xml)|application\/octet-stream)/i.test(contentType)
+    || /\.(?:mp4|m4v|webm|mkv|m3u8|mpd)(?:[?#]|$)/i.test(url);
+}
+
+export async function inspectDirectMediaSource(source: StreamSource, timeoutMs = 1500): Promise<StreamSource | null> {
+  const url = normalizeStreamUrl(source.url);
+  if (!url || !isSafeStreamUrl(url) || !/\.(?:mp4|m4v|webm|mkv|m3u8|mpd)(?:[?#]|$)/i.test(url)) return null;
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, { headers: { Accept: "video/*, audio/*, application/vnd.apple.mpegurl, application/x-mpegURL", Range: "bytes=0-4095" }, signal: controller.signal, cache: "no-store" });
+    if (!response.ok) return null;
+    const contentType = response.headers.get("content-type") || "";
+    if (!isDirectMediaCandidate(url, contentType)) return null;
+    const sample = await response.clone().body?.getReader().read();
+    const bytes = sample?.value ? new TextDecoder().decode(sample.value.slice(0, 4096)) : "";
+    if (!sample?.value?.byteLength || CHALLENGE_MARKERS.test(bytes) || /<html[\s>]/i.test(bytes)) return null;
+    return { ...source, url, verified: true };
+  } catch {
+    return null;
+  } finally {
+    window.clearTimeout(timeout);
+    controller.abort();
+  }
+}
+
 export function buildStreamSources(
   tmdbId: string | number,
   mediaType: StreamMediaType = "movie",
@@ -81,40 +111,39 @@ export function buildStreamSources(
 ): StreamSource[] {
   const id = String(tmdbId);
   const movieId = encodeURIComponent(id);
-  void mediaType;
-  void season;
-  void episode;
+  const routeType = mediaType === "tv" ? "tv" : "movie";
+  const seasonParam = season ? `?season=${encodeURIComponent(String(season))}${episode ? `&episode=${encodeURIComponent(String(episode))}` : ""}` : "";
   return [
-    [`https://vidsrc.pro/embed/movie/${movieId}`, "Server 1 - Primary HD"],
-    [`https://vidsrc.cc/v2/embed/movie/${movieId}`, "Server 2 - VidSrc CC"],
-    [`https://www.2embed.cc/embed/${movieId}`, "Server 3 - 2Embed Fast"],
-    [`https://player.smashy.stream/movie/${movieId}`, "Server 4 - SmashyStream"],
-    [`https://multiembed.mov/directstream.php?video_id=${movieId}&tmdb=1`, "Server 5 - SuperEmbed"],
-    [`https://vidsrc.me/embed/movie?tmdb=${movieId}`, "Server 6 - VidSrc VIP"],
-    [`https://vidsrc.xyz/embed/movie?tmdb=${movieId}`, "Server 7 - VidSrc XYZ"],
-    [`https://vidsrc.to/embed/movie/${movieId}`, "Server 8 - VidSrc TO"],
-    [`https://vidsrc.in/embed/movie/${movieId}`, "Server 9 - VidSrc IN"],
-    [`https://vidsrc.pm/embed/movie/${movieId}`, "Server 10 - VidSrc PM"],
-    [`https://vidsrc.net/embed/movie/${movieId}`, "Server 11 - VidSrc NET"],
-    [`https://vidsrc.stream/embed/movie/${movieId}`, "Server 12 - VidSrc Stream"],
-    [`https://embed.su/embed/movie/${movieId}`, "Server 13 - EmbedSU"],
-    [`https://autoembed.co/movie/tmdb/${movieId}`, "Server 14 - AutoEmbed"],
-    [`https://moviekoda.com/embed/movie/${movieId}`, "Server 15 - MovieKoda"],
-    [`https://2embed.org/embed/movie/${movieId}`, "Server 16 - 2Embed Org"],
+    [`https://vidsrc.pro/embed/${routeType}/${movieId}${seasonParam}`, "Server 1 - Primary HD"],
+    [`https://vidsrc.cc/v2/embed/${routeType}/${movieId}${seasonParam}`, "Server 2 - VidSrc CC"],
+    [`https://www.2embed.cc/embed/${routeType}/${movieId}${seasonParam}`, "Server 3 - 2Embed Fast"],
+    [`https://player.smashy.stream/${routeType}/${movieId}${seasonParam}`, "Server 4 - SmashyStream"],
+    [`https://multiembed.mov/directstream.php?video_id=${movieId}&tmdb=1${season ? `&season=${encodeURIComponent(String(season))}` : ""}${episode ? `&episode=${encodeURIComponent(String(episode))}` : ""}`, "Server 5 - SuperEmbed"],
+    [`https://vidsrc.me/embed/${routeType}?tmdb=${movieId}`, "Server 6 - VidSrc VIP"],
+    [`https://vidsrc.xyz/embed/${routeType}?tmdb=${movieId}`, "Server 7 - VidSrc XYZ"],
+    [`https://vidsrc.to/embed/${routeType}/${movieId}${seasonParam}`, "Server 8 - VidSrc TO"],
+    [`https://vidsrc.in/embed/${routeType}/${movieId}${seasonParam}`, "Server 9 - VidSrc IN"],
+    [`https://vidsrc.pm/embed/${routeType}/${movieId}${seasonParam}`, "Server 10 - VidSrc PM"],
+    [`https://vidsrc.net/embed/${routeType}/${movieId}${seasonParam}`, "Server 11 - VidSrc NET"],
+    [`https://vidsrc.stream/embed/${routeType}/${movieId}${seasonParam}`, "Server 12 - VidSrc Stream"],
+    [`https://embed.su/embed/${routeType}/${movieId}${seasonParam}`, "Server 13 - EmbedSU"],
+    [`https://autoembed.co/${routeType}/tmdb/${movieId}${seasonParam}`, "Server 14 - AutoEmbed"],
+    [`https://moviekoda.com/embed/${routeType}/${movieId}${seasonParam}`, "Server 15 - MovieKoda"],
+    [`https://2embed.org/embed/${routeType}/${movieId}${seasonParam}`, "Server 16 - 2Embed Org"],
     [`https://frembed.live/api/film.php?id=${movieId}`, "Server 17 - FreEmbed"],
-    [`https://vidbinge.dev/embed/movie/${movieId}`, "Server 18 - VidBinge"],
-    [`https://moviesapi.club/tv/${movieId}`, "Server 19 - MoviesAPI"],
-    [`https://cinemaos.work/embed/movie/${movieId}`, "Server 20 - CinemaOS"],
-    [`https://vidsrc.vip/embed/movie/${movieId}`, "Server 21 - VidSrc VIP Mirror"],
+    [`https://vidbinge.dev/embed/${routeType}/${movieId}${seasonParam}`, "Server 18 - VidBinge"],
+    [`https://moviesapi.club/${routeType}/${movieId}${seasonParam}`, "Server 19 - MoviesAPI"],
+    [`https://cinemaos.work/embed/${routeType}/${movieId}${seasonParam}`, "Server 20 - CinemaOS"],
+    [`https://vidsrc.vip/embed/${routeType}/${movieId}${seasonParam}`, "Server 21 - VidSrc VIP Mirror"],
     [`https://embed.smashystream.com/playere.php?tmdb=${movieId}`, "Server 22 - SmashyStream Embed"],
-    [`https://moviee.tv/embed/movie/${movieId}`, "Server 23 - Moviee"],
-    [`https://play.videasy.net/movie/${movieId}`, "Server 24 - Videasy"],
-    [`https://flixverse.org/embed/movie/${movieId}`, "Server 25 - Flixverse"],
+    [`https://moviee.tv/embed/${routeType}/${movieId}${seasonParam}`, "Server 23 - Moviee"],
+    [`https://play.videasy.net/${routeType}/${movieId}${seasonParam}`, "Server 24 - Videasy"],
+    [`https://flixverse.org/embed/${routeType}/${movieId}${seasonParam}`, "Server 25 - Flixverse"],
     [`https://api.123movie.cc/imdb/${movieId}`, "Server 26 - 123Movie"],
-    [`https://streamhub.to/embed/movie/${movieId}`, "Server 27 - StreamHub"],
-    [`https://vidsrc.stream/embed/movie?tmdb=${movieId}`, "Server 28 - VidSrc Stream Mirror"],
-    [`https://autoembed.cc/embed/movie/${movieId}`, "Server 29 - AutoEmbed Mirror"],
-    [`https://vidsrc.icu/embed/movie/${movieId}`, "Server 30 - VidSrc ICU"],
+    [`https://streamhub.to/embed/${routeType}/${movieId}${seasonParam}`, "Server 27 - StreamHub"],
+    [`https://vidsrc.stream/embed/${routeType}?tmdb=${movieId}`, "Server 28 - VidSrc Stream Mirror"],
+    [`https://autoembed.cc/embed/${routeType}/${movieId}${seasonParam}`, "Server 29 - AutoEmbed Mirror"],
+    [`https://vidsrc.icu/embed/${routeType}/${movieId}${seasonParam}`, "Server 30 - VidSrc ICU"],
   ].map(([url, label]) => ({ url, label, tier: "embed" as const }));
 }
 
@@ -124,8 +153,10 @@ export async function prefetchFastestServer(sources: StreamSource[], timeoutMs =
   const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
   try {
     const winner = await Promise.any(sources.map(async (source) => {
-      await fetch(source.url, { method: "HEAD", mode: "no-cors", cache: "no-store", signal: controller.signal });
-      return source;
+      const direct = await inspectDirectMediaSource(source, Math.min(timeoutMs, 1500));
+      if (direct) return direct;
+      if (!/\.(?:mp4|m4v|webm|mkv|m3u8|mpd)(?:[?#]|$)/i.test(source.url)) return source;
+      throw new Error("Unverified media source");
     }));
     return isSafeStreamUrl(winner.url) ? winner : sources[0] || null;
   } catch {

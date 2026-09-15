@@ -13,12 +13,13 @@ export async function POST(request: NextRequest) {
 
   const body = await request.json();
   const mode = body.mode === "signup" ? "signup" : "login";
-  const email = sanitizeEmail(body.email);
+  const rawEmail = typeof body.email === "string" ? body.email : "";
+  const email = sanitizeEmail(rawEmail);
   const name = sanitizeInput(body.name);
   const password = typeof body.password === "string" ? body.password : "";
   const picture = body.picture ? sanitizeInput(body.picture) : undefined;
 
-  if (!email || (mode === "signup" && !name) || password.length < 8) {
+  if (!email || rawEmail !== email || (mode === "signup" && !name) || password.length < 8) {
     return NextResponse.json({ error: "Invalid credentials" }, { status: 400 });
   }
 
