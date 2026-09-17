@@ -3,11 +3,12 @@
 import { useEffect } from "react";
 import type { MovieItem } from "@/types";
 import Image from "next/image";
-import { Play, X } from "lucide-react";
+import { Download, Play, X } from "lucide-react";
 import { MyListButton } from "./my-list-button";
-import { isTV } from "@/lib/variant";
+import { isTV, isPro } from "@/lib/variant";
 import { useRouter } from "next/navigation";
 import { prefetchStreamSources } from "@/lib/stream";
+import { downloadProMedia } from "@/lib/offline-download";
 
 interface MovieModalProps {
   item: MovieItem | null;
@@ -26,6 +27,12 @@ export function MovieModal({ item, onClose }: MovieModalProps) {
 
   const handlePlay = () => {
     router.push(`/watch/${item.id}?type=${item.mediaType}&title=${encodeURIComponent(item.title)}`);
+  };
+
+  const handleDownload = async () => {
+    if (!isPro || !item) return;
+    const bestUrl = `https://vidsrc.pro/embed/movie/${encodeURIComponent(String(item.id))}`;
+    await downloadProMedia(bestUrl, item.title);
   };
 
   return (
@@ -70,6 +77,16 @@ export function MovieModal({ item, onClose }: MovieModalProps) {
               <Play className="h-5 w-5 fill-black" />
               Play
             </button>
+            {isPro && (
+              <button
+                type="button"
+                onClick={() => void handleDownload()}
+                className="flex items-center gap-2 rounded border border-cyan-500 bg-cyan-500/10 px-6 py-2.5 font-semibold text-cyan-200 hover:bg-cyan-500/20 focus:outline-none focus:ring-2 focus:ring-cyan-400"
+              >
+                <Download className="h-5 w-5" />
+                Download
+              </button>
+            )}
             <MyListButton item={item} />
           </div>
         </div>

@@ -43,7 +43,7 @@ function cleanTmdbId(value: string | number | null | undefined) {
   return String(value).trim().replace(/[^0-9]/g, "");
 }
 
-export function VideoPlayer({ src, sources, title, tmdbId, preferredServerUrl, isHindiUnavailable = false, onClose, onProgress, onComplete, accountId, deviceType = "desktop", onRefresh }: VideoPlayerProps) {
+export function VideoPlayer({ src, sources, title, tmdbId, poster, preferredServerUrl, isHindiUnavailable = false, onClose, onProgress, onComplete, accountId, deviceType = "desktop", onRefresh }: VideoPlayerProps) {
   const [currentServerIndex, setCurrentServerIndex] = useState(0);
   const [isAutoMode, setIsAutoMode] = useState(true);
   const [showServerMenu, setShowServerMenu] = useState(false);
@@ -76,6 +76,7 @@ export function VideoPlayer({ src, sources, title, tmdbId, preferredServerUrl, i
   const [quality, setQuality] = useState("Auto");
   const [isScanning, setIsScanning] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [showPosterBackdrop, setShowPosterBackdrop] = useState(false);
   const scanStartedRef = useRef(false);
   const completionHandledRef = useRef(false);
   const fullscreenAttemptedRef = useRef(false);
@@ -319,6 +320,15 @@ export function VideoPlayer({ src, sources, title, tmdbId, preferredServerUrl, i
   }, []);
 
   useEffect(() => {
+    if (!poster || !activeSrc) {
+      setShowPosterBackdrop(false);
+      return;
+    }
+    const timer = window.setTimeout(() => setShowPosterBackdrop(true), 500);
+    return () => window.clearTimeout(timer);
+  }, [poster, activeSrc]);
+
+  useEffect(() => {
     if (!isNativeSource || !hlsRef.current) return;
     if (quality === "Auto") {
       hlsRef.current.currentLevel = -1;
@@ -340,6 +350,9 @@ export function VideoPlayer({ src, sources, title, tmdbId, preferredServerUrl, i
 
   useEffect(() => {
     const originalOpen = window.open;
+    const originalAssign = window.location.assign.bind(window.location);
+    const originalReplace = window.location.replace.bind(window.location);
+    const originalAnchorClick = HTMLAnchorElement.prototype.click;
     const originalOnBeforeUnload = window.onbeforeunload;
     const onBlur = () => {
       window.setTimeout(() => {
@@ -348,13 +361,17 @@ export function VideoPlayer({ src, sources, title, tmdbId, preferredServerUrl, i
       }, 100);
     };
 
+    const isAllowedNavigation = (url: string) => {
+      if (!url) return true;
+      if (url.startsWith("/") || url.startsWith("#") || url.startsWith("mailto:") || url.startsWith("tel:")) return true;
+      return url.startsWith(window.location.origin);
+    };
+
     const blockExternalNavigation = (event: MouseEvent | KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
       const anchor = target?.closest("a") as HTMLAnchorElement | null;
       if (!anchor?.href) return;
-      const href = anchor.href;
-      const isSameOrigin = href.startsWith(window.location.origin) || href.startsWith("/") || href.startsWith("#");
-      if (!isSameOrigin && !href.startsWith("mailto:") && !href.startsWith("tel:")) {
+      if (!isAllowedNavigation(anchor.href)) {
         event.preventDefault();
         event.stopPropagation();
       }
@@ -362,6 +379,21 @@ export function VideoPlayer({ src, sources, title, tmdbId, preferredServerUrl, i
 
     if (typeof window !== "undefined") {
       window.open = () => null;
+      window.location.assign = (url: string | URL) => {
+        const nextUrl = typeof url === "string" ? url : url.toString();
+        if (!isAllowedNavigation(nextUrl)) return;
+        return originalAssign(nextUrl);
+      };
+      window.location.replace = (url: string | URL) => {
+        const nextUrl = typeof url === "string" ? url : url.toString();
+        if (!isAllowedNavigation(nextUrl)) return;
+        return originalReplace(nextUrl);
+      };
+      HTMLAnchorElement.prototype.click = function clickIntercept() {
+        const href = this.href || "";
+        if (!isAllowedNavigation(href)) return;
+        return originalAnchorClick.call(this);
+      };
       window.onbeforeunload = () => "Are you sure you want to leave this stream?";
     }
     window.addEventListener("blur", onBlur);
@@ -370,6 +402,9 @@ export function VideoPlayer({ src, sources, title, tmdbId, preferredServerUrl, i
 
     return () => {
       window.open = originalOpen;
+      window.location.assign = originalAssign;
+      window.location.replace = originalReplace;
+      HTMLAnchorElement.prototype.click = originalAnchorClick;
       window.onbeforeunload = originalOnBeforeUnload;
       window.removeEventListener("blur", onBlur);
       document.removeEventListener("click", blockExternalNavigation, true);
@@ -563,13 +598,13 @@ export function VideoPlayer({ src, sources, title, tmdbId, preferredServerUrl, i
   }, [seekFeedback]);
 
   return (
-    <div ref={playerRootRef} data-device={deviceType} className={`fixed inset-0 z-[60] flex flex-col bg-black ${deviceType === "tv" ? "[& button]:min-h-12 [& button]:min-w-12" : ""}`} style={{ transform: "translateZ(0)" }} onMouseMove={onContainerInteraction} onClick={onContainerInteraction} onKeyDown={handlePlayerKeyDown} tabIndex={-1}>
+    <div ref={playerRootRef} data-device={deviceType} className={`fixed inset-0 z-[60] flex flex-col bg-transparent ${deviceType === "tv" ? "[& button]:min-h-12 [& button]:min-w-12" : ""}`} style={{ transform: "translateZ(0)" }} onMouseMove={onContainerInteraction} onClick={onContainerInteraction} onKeyDown={handlePlayerKeyDown} tabIndex={-1}>
       {englishFallbackNotice && (
         <div role="status" className="absolute inset-x-0 top-0 z-[10000] bg-yellow-400 px-4 py-3 text-center text-sm font-semibold text-black shadow-lg">
           Hindi audio not available on this server. Playing in default audio.
         </div>
       )}
-      <div className={`relative overflow-visible z-[9999] flex items-center justify-between bg-zinc-950/95 px-4 py-3 text-sm text-white transition-opacity duration-200 ${controlsVisible ? "opacity-100" : "opacity-0 pointer-events-none"}`} style={{ transform: "translateZ(0)" }}>
+      <div className={`relative overflow-visible z-[9999] flex items-center justify-between bg-transparent px-4 py-3 text-sm text-white transition-opacity duration-200 ${controlsVisible ? "opacity-100" : "opacity-0 pointer-events-none"}`} style={{ transform: "translateZ(0)" }}>
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-zinc-400">{title}</span>
           <span className="rounded-full border border-zinc-700 bg-zinc-900/80 px-2.5 py-1 text-[11px] uppercase tracking-wide text-zinc-300">{isAutoMode ? "Auto" : "Manual"}</span>
@@ -661,13 +696,16 @@ export function VideoPlayer({ src, sources, title, tmdbId, preferredServerUrl, i
           )}
         </div>
       </div>
-      <div className="z-50 relative w-full h-full min-h-[70vh] block flex items-center justify-center bg-black" onClick={handleTap} onDoubleClick={handleDoubleTap}>
-        {!activeSrc && <div className="absolute inset-0 z-40 flex items-center justify-center bg-black" role="status"><div className="h-10 w-10 animate-spin rounded-full border-4 border-yellow-400 border-t-transparent" /></div>}
+      <div className="z-50 relative w-screen h-screen overflow-hidden bg-transparent" onClick={handleTap} onDoubleClick={handleDoubleTap}>
+        {poster && showPosterBackdrop && !iframeLoadedRef.current && !isNativeSource && (
+          <div className="absolute inset-0 z-10 bg-cover bg-center bg-no-repeat" style={{ backgroundImage: `url(${poster})`, filter: "brightness(0.45) saturate(1.1)" }} />
+        )}
+        {!activeSrc && <div className="absolute inset-0 z-40 flex items-center justify-center bg-transparent" role="status"><div className="h-10 w-10 animate-spin rounded-full border-4 border-yellow-400 border-t-transparent" /></div>}
         {activeSrc && isNativeSource && <video
           ref={videoRef}
           key={activeSrc}
           src={activeSrc}
-          className="w-full h-full object-contain relative z-30 block opacity-100"
+          className="relative z-30 block h-screen w-screen object-cover opacity-100"
           autoPlay
           playsInline
           controls
@@ -716,9 +754,7 @@ export function VideoPlayer({ src, sources, title, tmdbId, preferredServerUrl, i
         {activeSrc && !isNativeSource && <iframe
           key={currentServerIndex}
           src={activeSrc}
-          className="w-full h-full min-h-[75vh] border-0 relative z-30 block bg-black opacity-100"
-          allow="autoplay; encrypted-media; gyroscope; picture-in-picture; fullscreen"
-          allowFullScreen
+          className="relative z-30 block h-screen w-screen border-0 bg-transparent opacity-100"
           referrerPolicy="no-referrer"
           title={title}
           onLoad={handleIframeLoad}
