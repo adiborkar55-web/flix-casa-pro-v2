@@ -63,8 +63,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   hydrate: async () => {
     let cachedAccount: GoogleAccount | null = null;
     try {
-      window.localStorage.removeItem("FLIXCASA_SESSION");
-      window.localStorage.removeItem("FLIXCASA_PERSISTENT_USER_SESSION");
       const accountId = window.localStorage.getItem("FLIXCASA_ACCOUNT_ID");
       if (accountId) cachedAccount = await getEncryptedItem<GoogleAccount>("session", accountId);
       const legacyAccount = window.localStorage.getItem("FLIXCASA_USER_SESSION");

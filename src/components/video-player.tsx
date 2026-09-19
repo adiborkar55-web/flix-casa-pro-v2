@@ -77,6 +77,7 @@ export function VideoPlayer({ src, sources, title, tmdbId, poster, preferredServ
   const [isScanning, setIsScanning] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showPosterBackdrop, setShowPosterBackdrop] = useState(false);
+  const [mediaReady, setMediaReady] = useState(false);
   const scanStartedRef = useRef(false);
   const completionHandledRef = useRef(false);
   const fullscreenAttemptedRef = useRef(false);
@@ -118,6 +119,11 @@ export function VideoPlayer({ src, sources, title, tmdbId, poster, preferredServ
     return appendResumeParam(server.url, resumeAt);
   }, [hasManualSelection, preferredServerUrl, servers, currentServerIndex, resumeAt]);
   const isNativeSource = /\.(?:m3u8|mp4|webm)(?:[?#]|$)/i.test(activeSrc);
+
+  useEffect(() => {
+    setMediaReady(false);
+    iframeLoadedRef.current = false;
+  }, [activeSrc]);
 
   const showControls = useCallback(() => {
     setControlsVisible(true);
@@ -414,6 +420,7 @@ export function VideoPlayer({ src, sources, title, tmdbId, poster, preferredServ
 
   const handleIframeLoad = () => {
     iframeLoadedRef.current = true;
+    setMediaReady(true);
     setStatusBannerVisible(false);
     setStatusText(`Loaded ${servers[currentServerIndex]?.label || "Server"}; waiting for player...`);
     showControls();
@@ -598,13 +605,13 @@ export function VideoPlayer({ src, sources, title, tmdbId, poster, preferredServ
   }, [seekFeedback]);
 
   return (
-    <div ref={playerRootRef} data-device={deviceType} className={`fixed inset-0 z-[60] flex flex-col bg-transparent ${deviceType === "tv" ? "[& button]:min-h-12 [& button]:min-w-12" : ""}`} style={{ transform: "translateZ(0)" }} onMouseMove={onContainerInteraction} onClick={onContainerInteraction} onKeyDown={handlePlayerKeyDown} tabIndex={-1}>
+    <div ref={playerRootRef} data-device={deviceType} className={`fixed inset-0 z-[60] flex flex-col bg-transparent ${deviceType === "tv" ? "[& button]:min-h-12 [& button]:min-w-12" : ""}`} style={{ transform: "translateZ(0)", backfaceVisibility: "hidden" }} onMouseMove={onContainerInteraction} onClick={onContainerInteraction} onKeyDown={handlePlayerKeyDown} tabIndex={-1}>
       {englishFallbackNotice && (
         <div role="status" className="absolute inset-x-0 top-0 z-[10000] bg-yellow-400 px-4 py-3 text-center text-sm font-semibold text-black shadow-lg">
           Hindi audio not available on this server. Playing in default audio.
         </div>
       )}
-      <div className={`relative overflow-visible z-[9999] flex items-center justify-between bg-transparent px-4 py-3 text-sm text-white transition-opacity duration-200 ${controlsVisible ? "opacity-100" : "opacity-0 pointer-events-none"}`} style={{ transform: "translateZ(0)" }}>
+      <div className={`relative overflow-visible z-[9999] flex items-center justify-between bg-transparent px-4 py-3 text-sm text-white transition-opacity duration-200 ${controlsVisible ? "opacity-100" : "opacity-0"}`} style={{ transform: "translateZ(0)", backfaceVisibility: "hidden" }}>
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-zinc-400">{title}</span>
           <span className="rounded-full border border-zinc-700 bg-zinc-900/80 px-2.5 py-1 text-[11px] uppercase tracking-wide text-zinc-300">{isAutoMode ? "Auto" : "Manual"}</span>
@@ -696,8 +703,8 @@ export function VideoPlayer({ src, sources, title, tmdbId, poster, preferredServ
           )}
         </div>
       </div>
-      <div className="z-50 relative w-screen h-screen overflow-hidden bg-transparent" onClick={handleTap} onDoubleClick={handleDoubleTap}>
-        {poster && showPosterBackdrop && !iframeLoadedRef.current && !isNativeSource && (
+      <div className="z-50 relative w-screen h-screen overflow-hidden bg-transparent" style={{ transform: "translateZ(0)", backfaceVisibility: "hidden" }} onClick={handleTap} onDoubleClick={handleDoubleTap}>
+        {poster && showPosterBackdrop && !mediaReady && (
           <div className="absolute inset-0 z-10 bg-cover bg-center bg-no-repeat" style={{ backgroundImage: `url(${poster})`, filter: "brightness(0.45) saturate(1.1)" }} />
         )}
         {!activeSrc && <div className="absolute inset-0 z-40 flex items-center justify-center bg-transparent" role="status"><div className="h-10 w-10 animate-spin rounded-full border-4 border-yellow-400 border-t-transparent" /></div>}
@@ -706,6 +713,7 @@ export function VideoPlayer({ src, sources, title, tmdbId, poster, preferredServ
           key={activeSrc}
           src={activeSrc}
           className="relative z-30 block h-screen w-screen object-cover opacity-100"
+          style={{ transform: "translateZ(0)", backfaceVisibility: "hidden" }}
           autoPlay
           playsInline
           controls
@@ -717,6 +725,7 @@ export function VideoPlayer({ src, sources, title, tmdbId, poster, preferredServ
           }}
           onPlay={() => {
             setIsPlaying(true);
+            setMediaReady(true);
             setStatusBannerVisible(false);
             void requestAppFullscreen(videoRef.current || playerRootRef.current);
           }}
@@ -755,6 +764,7 @@ export function VideoPlayer({ src, sources, title, tmdbId, poster, preferredServ
           key={currentServerIndex}
           src={activeSrc}
           className="relative z-30 block h-screen w-screen border-0 bg-transparent opacity-100"
+          style={{ transform: "translateZ(0)", backfaceVisibility: "hidden" }}
           referrerPolicy="no-referrer"
           title={title}
           onLoad={handleIframeLoad}
